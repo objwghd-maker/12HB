@@ -135,7 +135,6 @@ local function teleportToPlayerFront(targetPlayer)
         local targetHRP = targetChar.HumanoidRootPart
         local myHRP = myChar.HumanoidRootPart
         
-        -- คำนวณพิกัดด้านหน้าของผู้เล่นเป้าหมายระยะ 3.5 หน่วย
         local frontCFrame = targetHRP.CFrame * CFrame.new(0, 0, -3.5) * CFrame.Angles(0, math.pi, 0)
         myHRP.CFrame = frontCFrame
     end
