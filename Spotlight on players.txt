@@ -351,6 +351,25 @@ RunService.RenderStepped:Connect(function()
             end
         end
     elseif activeSpectatingModel then
+        if not activeSpectatingModel.Parent or not activeSpectatingModel:FindFirstChild("Humanoid") or activeSpectatingModel.Humanoid.Health <= 0 then
+            local foundNew = nil
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("Model") and obj.Name == activeSpectatingModel.Name and obj:FindFirstChild("Humanoid") and obj.Humanoid.Health > 0 then
+                    local isPlayerChar = false
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p.Character == obj then isPlayerChar = true break end
+                    end
+                    if not isPlayerChar then
+                        foundNew = obj
+                        break
+                    end
+                end
+            end
+            if foundNew then
+                activeSpectatingModel = foundNew
+            end
+        end
+
         if activeSpectatingModel and activeSpectatingModel:FindFirstChild("Humanoid") then
             Camera.CameraSubject = activeSpectatingModel.Humanoid
             if activeSpectatingModel:FindFirstChild("HumanoidRootPart") then
