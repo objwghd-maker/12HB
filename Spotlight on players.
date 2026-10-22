@@ -30,7 +30,7 @@ UIStroke.Parent = MainFrame
 
 local Title = Instance.new("TextLabel")
 Title.Name = "Title"
-Title.Size = UDim2.new(1, -95, 0, 35)
+Title.Size = UDim2.new(1, -120, 0, 35)
 Title.Position = UDim2.new(0, 5, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "PLAYER SPECTATE"
@@ -82,6 +82,20 @@ TeleportButton.Parent = MainFrame
 local TeleportCorner = Instance.new("UICorner")
 TeleportCorner.CornerRadius = UDim.new(0, 6)
 TeleportCorner.Parent = TeleportButton
+
+local ScanButton = Instance.new("TextButton")
+ScanButton.Name = "ScanButton"
+ScanButton.Size = UDim2.new(0, 25, 0, 25)
+ScanButton.Position = UDim2.new(1, -105, 0, 5)
+ScanButton.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+ScanButton.Text = "👁️"
+ScanButton.TextSize = 14
+ScanButton.Font = Enum.Font.Gotham
+ScanButton.Parent = MainFrame
+
+local ScanCorner = Instance.new("UICorner")
+ScanCorner.CornerRadius = UDim.new(0, 6)
+ScanCorner.Parent = ScanButton
 
 local ScrollingFrame = Instance.new("ScrollingFrame")
 ScrollingFrame.Size = UDim2.new(1, -20, 1, -85)
@@ -172,6 +186,9 @@ local isMinimized = false
 local savedPosition = nil
 local activeSpectatingPlayer = nil
 
+local scanningEnabled = false
+local espCache = {}
+
 ToggleButton.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     ScrollingFrame.Visible = false
@@ -239,6 +256,84 @@ TeleportButton.MouseButton1Click:Connect(function()
     end
 end)
 
+local function removeESP(character)
+    if espCache[character] then
+        if espCache[character].highlight then espCache[character].highlight:Destroy() end
+        if espCache[character].billboard then espCache[character].billboard:Destroy() end
+        espCache[character] = nil
+    end
+end
+
+local function addESP(character, modelName)
+    if character == LocalPlayer.Character then return end
+    if espCache[character] then return end
+    if not character:FindFirstChild("HumanoidRootPart") then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ScannerHighlight"
+    highlight.Adornee = character
+    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+    highlight.FillTransparency = 0.4
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.OutlineTransparency = 0
+    highlight.Parent = character
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ScannerBillboard"
+    billboard.Adornee = character.HumanoidRootPart
+    billboard.Size = UDim2.new(0, 200, 0, 60)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = character
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+    textLabel.TextStrokeTransparency = 0
+    textLabel.TextSize = 13
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.Parent = billboard
+
+    espCache[character] = {
+        highlight = highlight,
+        billboard = billboard,
+        textLabel = textLabel,
+        rootPart = character.HumanoidRootPart,
+        name = modelName
+    }
+end
+
+ScanButton.MouseButton1Click:Connect(function()
+    scanningEnabled = not scanningEnabled
+    
+    if scanningEnabled then
+        ScanButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Character then
+                addESP(player.Character, player.Name)
+            end
+        end
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+                local isPlayerChar = false
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p.Character == obj then isPlayerChar = true break end
+                end
+                if not isPlayerChar then
+                    addESP(obj, obj.Name)
+                end
+            end
+        end
+    else
+        ScanButton.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+        for char, _ in pairs(espCache) do
+            removeESP(char)
+        end
+        espCache = {}
+    end
+end)
+
 RunService.RenderStepped:Connect(function()
     if activeSpectatingPlayer then
         if activeSpectatingPlayer.Character and activeSpectatingPlayer.Character:FindFirstChild("Humanoid") then
@@ -255,6 +350,29 @@ RunService.RenderStepped:Connect(function()
         if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
             if Camera.CameraSubject ~= LocalPlayer.Character.Humanoid then
                 Camera.CameraSubject = LocalPlayer.Character.Humanoid
+            end
+        end
+    end
+
+    if scanningEnabled then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
+                local isPlayerChar = false
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p.Character == obj then isPlayerChar = true break end
+                end
+                if not isPlayerChar and not espCache[obj] then
+                    addESP(obj, obj.Name)
+                end
+            end
+        end
+
+        for char, data in pairs(espCache) do
+            if data.rootPart and data.textLabel and data.rootPart.Parent then
+                local pos = data.rootPart.Position
+                data.textLabel.Text = string.format("[%s]\nPos: X:%.0f, Y:%.0f, Z:%.0f", data.name, pos.X, pos.Y, pos.Z)
+            else
+                removeESP(char)
             end
         end
     end
@@ -373,11 +491,23 @@ local function updatePlayerList()
     updateActiveBarColor()
 end
 
-Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerAdded:Connect(function(player)
+    updatePlayerList()
+    player.CharacterAdded:Connect(function(char)
+        if scanningEnabled then
+            task.wait(1)
+            addESP(char, player.Name)
+        end
+    end)
+end)
+
 Players.PlayerRemoving:Connect(function(player)
     if activeSpectatingPlayer == player then
         activeSpectatingPlayer = nil
         Title.Text = "PLAYER SPECTATE"
+    end
+    if player.Character then
+        removeESP(player.Character)
     end
     updatePlayerList()
 end)
@@ -389,4 +519,3 @@ ResetButton.MouseButton1Click:Connect(function()
 end)
 
 updatePlayerList()
-
